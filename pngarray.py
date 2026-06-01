@@ -1,6 +1,6 @@
 import pygame
 import numpy as np
-from PIL import Image
+import imageio
 
 # Initialize pygame
 pygame.init()
@@ -12,9 +12,26 @@ pygame.display.set_caption("Tree Visualization with Rectangles")
 clock = pygame.time.Clock()
 
 # Colors
-BG_COLOR = (250, 230, 230)
-INITIAL_COLOR = (100,100, 255)
-FINAL_COLOR = (255, 100, 150)
+BG_COLOR =  (92, 75, 119)
+RED = (228, 3, 3)
+ORANGE = (255, 140, 0)
+YELLOW = (255, 237, 0)
+GREEN = (0, 128, 38)
+BLUE = (0, 76, 255)
+VIOLET = (115, 41, 130)
+COLORS = [(155, 112, 157), (169, 104, 147), (204, 109, 110), (148, 152, 199), (101, 80, 123)]
+COLORS2 = [(138, 147, 202) , (210, 116, 134), (255, 189, 141), (253, 187, 152), (237, 130, 120)]
+
+
+def complementary_color(rgb):
+    """Return the complementary RGB color for a given (r, g, b) triple.
+
+    Each channel is inverted around 255 so the complementary color is
+    (255-r, 255-g, 255-b).
+    """
+    r, g, b = rgb
+    return (255 - r, 255 - g, 255 - b)
+
 
 class Node(object):
     def __init__(self, data):
@@ -84,7 +101,6 @@ def merge_overlaps(node, merge_locations, depth=0):
             if nxt_left <= cur_right:
                 # extend current interval and absorb children
                 merge_locations.append((nxt_left, cur_right))
-                print(f"Merging {cur_left}-{cur_right} with {nxt_left}-{nxt_right} at depth {depth}")
                 cur_right = max(cur_right, nxt_right)
                 cur_children.extend(nxt.children)
                 j += 1
@@ -108,7 +124,7 @@ def merge_overlaps(node, merge_locations, depth=0):
     for child in node.children:
         merge_overlaps(child, merge_locations, depth + 1)
 
-COLOR_INTERP_HEIGHT = 5
+COLOR_INTERP_HEIGHT = 20
 
 def gradient_color(initial_color, final_color, max_height, depth):
     if (depth//max_height) % 2 == 1:
@@ -119,7 +135,7 @@ def gradient_color(initial_color, final_color, max_height, depth):
     b = int(initial_color[2] * (1 - ratio) + final_color[2] * ratio)
     return (r, g, b)
 
-def draw_node_rectangles(node, depth=0, x_scale=20, x_offset = 500, y_start=500, rect_height=40):
+def draw_node_rectangles(node, initial_color, final_color, depth=0, x_scale=20, x_offset = 500, y_start=500, rect_height=40):
     """Draw rectangles for node and all children. Returns list of (left, top, width, height, depth)."""
     rects = []
     left = min(node.data.left, node.data.right)
@@ -131,14 +147,14 @@ def draw_node_rectangles(node, depth=0, x_scale=20, x_offset = 500, y_start=500,
     
     y = y_start - depth * (rect_height)
     
-    color = gradient_color(INITIAL_COLOR, FINAL_COLOR, COLOR_INTERP_HEIGHT, depth)
+    color = gradient_color(initial_color, final_color, COLOR_INTERP_HEIGHT, depth)
     # Draw rectangle for this node
     pygame.draw.rect(screen, color, (x1, y, width, rect_height))
     rects.append((x1, y, width, rect_height, depth))
     
     # Recursively draw children
     for child in node.children:
-        child_rects = draw_node_rectangles(child, depth + 1, x_scale, x_offset, y_start, rect_height)
+        child_rects = draw_node_rectangles(child, initial_color, final_color, depth + 1, x_scale, x_offset, y_start, rect_height)
         rects.extend(child_rects)
     
     return rects
@@ -165,12 +181,12 @@ for i in range(NUM_OF_NODES):
 frame_count = 0
 font = pygame.font.Font(None, 24)
 
-# GIF export settings
-capture_frames = False
+# Video export settings
+capture_frames = True
 frames = []
-MAX_GIF_FRAMES = 6000
-GIF_FPS = 60
-GIF_FILENAME = "animation.gif"
+MAX_VIDEO_FRAMES = 6000
+VIDEO_FPS = 60
+VIDEO_FILENAME = "animation.mp4"
 
 # Main loop
 running = True
@@ -178,15 +194,16 @@ cur_t = 0
 delta_t = 0
 while running:
     delta_t = clock.tick(60)
+    cur_t += delta_t
     
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             running = False
     
     # Add new nodes randomly
-    points = np.random.poisson(0.04)
+    points = np.random.poisson(0.02+ 0.03*(cur_t/1000)  )
     for i in range(points):
-        base = (root.data.right - root.data.left) 
+        base = node_array[0].data.right - node_array[0].data.left
         nucleation = np.random.random() * base - base/2
         parent, parent_depth = find_deepest_node_for_x(node_array[0], nucleation)
         if parent is not None:
@@ -216,7 +233,7 @@ while running:
     # Draw rectangles for all nodes
     all_rects = []
     for i in range(len(node_array)):
-        all_rects.extend(draw_node_rectangles(node_array[i],0, 20, 800, 300+100*i, 40))
+        all_rects.extend(draw_node_rectangles(node_array[i], COLORS[i % len(COLORS)], COLORS2[i % len(COLORS2)], 0, 20, 800, 465+80*i, 15))
     # all_rects = draw_node_rectangles(root)
     
 
@@ -226,7 +243,7 @@ while running:
     info_text = font.render(f"Frame: {frame_count}  Tree Depth: {tree_depth}  Nodes: {len(all_rects)}", True, (200, 200, 200))
     screen.blit(info_text, (10, 10))
     
-    if capture_frames and len(frames) < MAX_GIF_FRAMES:
+    if capture_frames and len(frames) < MAX_VIDEO_FRAMES:
         frame = pygame.surfarray.array3d(screen)
         frame = np.transpose(frame, (1, 0, 2))
         frames.append(frame)
@@ -237,12 +254,15 @@ while running:
 pygame.quit()
 
 if capture_frames and frames:
-    images = [Image.fromarray(frame) for frame in frames]
-    images[0].save(
-        GIF_FILENAME,
-        save_all=True,
-        append_images=images[1:],
-        duration=int(1000 / GIF_FPS),
-        loop=0,
-    )
-    print(f"Saved {len(images)} frames to {GIF_FILENAME}")
+    try:
+        with imageio.get_writer(
+            VIDEO_FILENAME,
+            fps=VIDEO_FPS,
+            codec="libx264",
+            ffmpeg_params=["-pix_fmt", "yuv420p"],
+        ) as writer:
+            for frame in frames:
+                writer.append_data(frame)
+        print(f"Saved {len(frames)} frames to {VIDEO_FILENAME}")
+    except Exception as e:
+        print(f"Failed to save MP4: {e}")

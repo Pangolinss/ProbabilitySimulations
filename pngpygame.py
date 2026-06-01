@@ -1,6 +1,6 @@
 import pygame
 import numpy as np
-from PIL import Image
+import imageio
 
 # Initialize pygame
 pygame.init()
@@ -158,12 +158,12 @@ def get_tree_depth(node, depth=0):
 frame_count = 0
 font = pygame.font.Font(None, 24)
 
-# GIF export settings
-capture_frames = False
+# Video export settings
+capture_frames = True
 frames = []
-MAX_GIF_FRAMES = 6000
-GIF_FPS = 60
-GIF_FILENAME = "animation.gif"
+MAX_VIDEO_FRAMES = 6000
+VIDEO_FPS = 60
+VIDEO_FILENAME = "png.mp4"
 
 # Main loop
 running = True
@@ -196,14 +196,14 @@ while running:
     screen.fill(BG_COLOR)
     
     # Draw rectangles for all nodes
-    all_rects = draw_node_rectangles(root)
+    all_rects = draw_node_rectangles(root,0, 20, 700, 500, 40)
     
     # Draw info text
     tree_depth = get_tree_depth(root)
     info_text = font.render(f"Frame: {frame_count}  Tree Depth: {tree_depth}  Nodes: {len(all_rects)}", True, (200, 200, 200))
     screen.blit(info_text, (10, 10))
     
-    if capture_frames and len(frames) < MAX_GIF_FRAMES:
+    if capture_frames and len(frames) < MAX_VIDEO_FRAMES:
         frame = pygame.surfarray.array3d(screen)
         frame = np.transpose(frame, (1, 0, 2))
         frames.append(frame)
@@ -214,12 +214,15 @@ while running:
 pygame.quit()
 
 if capture_frames and frames:
-    images = [Image.fromarray(frame) for frame in frames]
-    images[0].save(
-        GIF_FILENAME,
-        save_all=True,
-        append_images=images[1:],
-        duration=int(1000 / GIF_FPS),
-        loop=0,
-    )
-    print(f"Saved {len(images)} frames to {GIF_FILENAME}")
+    try:
+        with imageio.get_writer(
+            VIDEO_FILENAME,
+            fps=VIDEO_FPS,
+            codec="libx264",
+            ffmpeg_params=["-pix_fmt", "yuv420p"],
+        ) as writer:
+            for frame in frames:
+                writer.append_data(frame)
+        print(f"Saved {len(frames)} frames to {VIDEO_FILENAME}")
+    except Exception as e:
+        print(f"Failed to save MP4: {e}")
