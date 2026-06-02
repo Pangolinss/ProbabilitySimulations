@@ -1,11 +1,12 @@
 import pygame
 import numpy as np
 import imageio
+import bisect 
 
-WIDTH, HEIGHT = 800, 200
-BLOCK_WIDTH = 10
-BLOCK_HEIGHT = 10
-SPACING = 10
+WIDTH, HEIGHT = 800, 400
+BLOCK_WIDTH = 4
+BLOCK_HEIGHT = 4
+SPACING = 4
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("Ballistic Deposition")
 clock = pygame.time.Clock()
@@ -19,6 +20,7 @@ class Block(object):
         self.v = 1
         self.color = (255,255,255)
         self.alive = True
+        self.gone = False
 
 
 def intersect(block1, block2):
@@ -37,8 +39,17 @@ def brighten(color, factor):
     b = max(0, min(255, int(b * factor)))
     return (r, g, b)
 
+deadblocks = []
 blocks = []
 running = True
+
+capture_frames = True
+frames = []
+MAX_VIDEO_FRAMES = 6000
+VIDEO_FPS = 60
+VIDEO_FILENAME = "animation.mp4"
+
+
 while running:
     delta_t = clock.tick(120)/1000
     for event in pygame.event.get():
@@ -46,34 +57,89 @@ while running:
             running = False
     screen.fill(BG_COLOR)
 
-    n = np.random.poisson(0.2)
+    n = np.random.poisson(3)
+    new_blocks = []
+    gone_index = []
     for i in range(n):
-        blocks.append(Block(np.random.randint(0, WIDTH/SPACING)*SPACING , 0))
-    for block in blocks:
-        if block.alive:
-            block.y += block.v 
-            if block.y >= HEIGHT - BLOCK_HEIGHT:
-                block.y = HEIGHT - BLOCK_HEIGHT
-                block.alive = False
-            else:
-                for other in blocks:
-                    if other is not block and not other.alive and (intersect(block, other)):
-                        if (abs(block.x - other.x) == BLOCK_WIDTH) and (block.y == other.y):
-                            block.alive = False
-                            break
-                        block.y = other.y - BLOCK_HEIGHT
+        new_blocks = Block(np.random.randint(0, WIDTH/SPACING)*SPACING , 0)
+        if gone_index != []:
+            blocks[-gone_index[-1]] = new_blocks
+            gone_index = gone_index[:-1]
+        else:
+            blocks.append(new_blocks)
+    for j in range(5):
+        k =0
+        for block in blocks:
+            if block.alive:
+                block.y += block.v 
+                if block.y >= HEIGHT - BLOCK_HEIGHT:
+                    if (block.x <350) or (block.x > 450):
+                        block.gone = True
+                        bisect.insort(gone_index, -k)
+                    else:
+                        block.y = HEIGHT - BLOCK_HEIGHT
                         block.alive = False
-                        break 
+                        deadblocks.append(block)
+                        block.gone = True
+                        bisect.insort(gone_index, -k)
+
+
+                else:
+                    for other in deadblocks:
+                        if (intersect(block, other)):
+                            if (abs(block.x - other.x) == BLOCK_WIDTH) and (block.y == other.y):
+                                block.alive = False
+                                deadblocks.append(block)
+                                block.gone = True
+                                bisect.insort(gone_index, -k)
+                                break
+                            block.y = other.y - BLOCK_HEIGHT
+                            block.alive = False
+                            deadblocks.append(block)
+                            block.gone = True
+                            bisect.insort(gone_index, -k)
+                            break 
+        k += 1
 
     for block in blocks:
-        if (block.alive):
-            pygame.draw.rect(screen, (255,255,255), (block.x, block.y, BLOCK_WIDTH, BLOCK_HEIGHT))
+        ratio = 0
+        if (block.y != 0):
+            ratio = HEIGHT/block.y
         else:
-            pygame.draw.rect(screen, brighten((117,187,220), HEIGHT/block.y), (block.x, block.y, BLOCK_WIDTH, BLOCK_HEIGHT))
+            ratio = HEIGHT/0.01
+        if (block.gone is False):
+            if (block.alive):
+                pygame.draw.rect(screen, (150,150,150), (block.x, block.y, BLOCK_WIDTH, BLOCK_HEIGHT))
+            else:
+                pygame.draw.rect(screen, brighten((117,187,220), ratio), (block.x, block.y, BLOCK_WIDTH, BLOCK_HEIGHT))
+    for block in deadblocks:
+        if (block.y != 0):
+            ratio = HEIGHT/block.y
+        else:
+            ratio = HEIGHT/0.01
+        pygame.draw.rect(screen, brighten((117,187,220), ratio), (block.x, block.y, BLOCK_WIDTH, BLOCK_HEIGHT))
 
     # Update the display
+    if capture_frames and len(frames) < MAX_VIDEO_FRAMES:
+        frame = pygame.surfarray.array3d(screen)
+        frame = np.transpose(frame, (1, 0, 2))
+        frames.append(frame)
     pygame.display.flip()
 
     # Cap the frame rate
     clock.tick(60)
+
+if capture_frames and frames:
+    try:
+        with imageio.get_writer(
+            VIDEO_FILENAME,
+            fps=VIDEO_FPS,
+            codec="libx264",
+            ffmpeg_params=["-pix_fmt", "yuv420p"],
+        ) as writer:
+            for frame in frames:
+                writer.append_data(frame)
+        print(f"Saved {len(frames)} frames to {VIDEO_FILENAME}")
+    except Exception as e:
+        print(f"Failed to save MP4: {e}")
 

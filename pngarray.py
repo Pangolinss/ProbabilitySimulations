@@ -12,7 +12,7 @@ pygame.display.set_caption("Tree Visualization with Rectangles")
 clock = pygame.time.Clock()
 
 # Colors
-BG_COLOR =  (92, 75, 119)
+BG_COLOR =  (255,255,255)#(92, 75, 119)
 RED = (228, 3, 3)
 ORANGE = (255, 140, 0)
 YELLOW = (255, 237, 0)
@@ -41,12 +41,18 @@ class Node(object):
     def add_child(self, obj):
         self.children.append(obj)
 
+class Line(object):
+    def __init__(self, p1_, p2_, d, color = (0,0,0), thickness = 1):
+        self.p1 = p1_
+        self.p2 = p2_
+        self.depth = d
+        self.color = color
+        self.thickness = thickness
 class Tower(object):
     def __init__(self, left_, right_):
         self.left = left_
         self.right = right_
 
-root = Node(Tower(-10, 10))
 
 def tree_stats(node, depth=0):
     min_left = node.data.left
@@ -58,7 +64,6 @@ def tree_stats(node, depth=0):
         min_left = min(min_left, c_left)
         max_right = max(max_right, c_right)
     return max_depth, min_left, max_right
-
 
 def find_deepest_node_for_x(node, x):
     def helper(current, depth=0):
@@ -159,6 +164,41 @@ def draw_node_rectangles(node, initial_color, final_color, depth=0, x_scale=20, 
     
     return rects
 
+
+def node_tree_to_lines(node):
+    """Convert a tower node tree into a list of horizontal lines.
+
+    Each line is either the top edge of a rectangle or the gap between
+    adjacent rectangles at the same depth.
+    """
+    lines = []
+    hori_lines = []
+    def helper(current, lines, hori_lines, depth):
+        if current is None:
+            return
+        hori_lines.append((current.data.left, current.data.right, depth))
+        if current.children == []:
+            lines.append(Line(current.data.left, current.data.right, depth))
+            return
+        left = min(current.data.left, current.data.right)
+        right = max(current.data.left, current.data.right)
+        node_left = 0
+        node_right = 0
+        for node in current.children:
+            node_left = min(node.data.left, node.data.right)
+            node_right = max(node.data.left, node.data.right)
+            # add line for gap between current and child if they don't overlap
+            if right > node_left:
+                lines.append(Line( left, node_left, depth))
+            helper(node, lines, hori_lines, depth + 1)
+            left = node_right
+        if (right > node_right):
+            lines.append(Line(node_right, right, depth))
+    helper(node, lines, hori_lines, 0)
+
+    return lines, hori_lines
+
+
 def expand_node_rectangles(node, elapsed_time, rate = 0.1):
     node.data.left -= rate*elapsed_time
     node.data.right += rate*elapsed_time
@@ -171,10 +211,10 @@ def get_tree_depth(node, depth=0):
         return depth
     return max(get_tree_depth(child, depth + 1) for child in node.children)
 
-NUM_OF_NODES = 5
+NUM_OF_NODES = 1
 node_array = []
 for i in range(NUM_OF_NODES):
-    node_array.append(Node(Tower(-10, 10)))
+    node_array.append(Node(Tower(-0.5, 0.5)))
 
 
 # Simulation parameters
@@ -201,7 +241,7 @@ while running:
             running = False
     
     # Add new nodes randomly
-    points = np.random.poisson(0.02+ 0.03*(cur_t/1000)  )
+    points = np.random.poisson(0.01+ 0.03*(cur_t/2000)  )
     for i in range(points):
         base = node_array[0].data.right - node_array[0].data.left
         nucleation = np.random.random() * base - base/2
@@ -226,23 +266,33 @@ while running:
                     if parent is not None:
                         new_node = Node(Tower(merge_location - 0.1, merge_location + 0.1))
                         parent.add_child(new_node)
+                    parent.children = sorted(parent.children, key=lambda c: min(c.data.left, c.data.right))
     
     # Draw
     screen.fill(BG_COLOR)
     
     # Draw rectangles for all nodes
     all_rects = []
+    #for i in range(len(node_array)):
+    #    all_rects.extend(draw_node_rectangles(node_array[i], COLORS[i % len(COLORS)], COLORS2[i % len(COLORS2)], 0, 20, 800, 465+80*i, 15))
+
+    line_array = [None]*NUM_OF_NODES
+    hori_line_array = [None]*NUM_OF_NODES
+    SCALE = 30
+    X_OFFSET = 800
+    Y_OFFSET = 600
+    SPACING = 30
+    RECT_HEIGHT = 30
     for i in range(len(node_array)):
-        all_rects.extend(draw_node_rectangles(node_array[i], COLORS[i % len(COLORS)], COLORS2[i % len(COLORS2)], 0, 20, 800, 465+80*i, 15))
-    # all_rects = draw_node_rectangles(root)
+        line_array[i], hori_line_array[i] = node_tree_to_lines(node_array[i])
+        for l in line_array[i]:
+            pygame.draw.line(screen, (0,0,0), (l.p1*SCALE + X_OFFSET, Y_OFFSET+SPACING*i - l.depth*RECT_HEIGHT), (l.p2*SCALE + X_OFFSET, Y_OFFSET+SPACING*i - l.depth*RECT_HEIGHT), 3)
     
+        for l in hori_line_array[i]:
+            pygame.draw.line(screen, (0,0,0), (l[0]*SCALE + X_OFFSET, Y_OFFSET+SPACING*i - l[2]*RECT_HEIGHT), (l[0]*SCALE + X_OFFSET, Y_OFFSET+SPACING*i - (l[2]-1)*RECT_HEIGHT), 3)
+            pygame.draw.line(screen, (0,0,0), (l[1]*SCALE + X_OFFSET, Y_OFFSET+SPACING*i - l[2]*RECT_HEIGHT), (l[1]*SCALE + X_OFFSET, Y_OFFSET+SPACING*i - (l[2]-1)*RECT_HEIGHT), 3) 
 
 
-    # Draw info text
-    tree_depth = get_tree_depth(root)
-    info_text = font.render(f"Frame: {frame_count}  Tree Depth: {tree_depth}  Nodes: {len(all_rects)}", True, (200, 200, 200))
-    screen.blit(info_text, (10, 10))
-    
     if capture_frames and len(frames) < MAX_VIDEO_FRAMES:
         frame = pygame.surfarray.array3d(screen)
         frame = np.transpose(frame, (1, 0, 2))

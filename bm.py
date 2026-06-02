@@ -156,8 +156,10 @@ for j in range(0,2):
     combine.extend(zip1)
 
 def refine_bm(x, y):
-    q1 = 7*len(x)//16
-    q3 = 9*len(x)//16
+    q1 = len(x)//4
+    q3 = 3*len(x)//4
+    # q1 = 0
+    # q3 = len(x)
     new_points = []
     for i in range(q1, q3-1):
         mid_x = (x[i] + x[i+1]) / 2
@@ -191,14 +193,25 @@ def prune_and_scale(x, y, x_min, x_max, scale_factor):
 s = 1.0
 k = 2
 def update2(frame):
-    global s, calls, BM, new_x, new_y, k
-    s += 0.05
+    global s, calls, BM, new_x, new_y, k, plot
+    s = 1.01 * s
     #ax.axis([-10/s, 10/s, -0.5/(s**2), 0.5/(s**2)])
     ax.axis([-10/(s**2), 10/(s**2), -3/s, 3/s])
-    if (s> np.sqrt(k)):
-        k = 2*k
-        x = plot[0].get_xdata()
-        y = plot[0].get_ydata()
+    xdata = plot[0].get_xdata()
+    ydata = plot[0].get_ydata()
+    if (s> np.sqrt(k) ):
+        k = k*2
+        min_index = 0
+        max_index = 0
+        for i in range(len(xdata)):
+            if (min_index == 0) and (xdata[i] >= ax.get_xlim()[0]):
+                min_index = i
+            if (min_index != 0) and (xdata[i] < ax.get_xlim()[1]):
+                max_index = i
+        x = xdata[min_index:max_index]
+        y = ydata[min_index:max_index]
+        print(len(x))
+        
         pairs = [(a,b) for a,b in zip(x,y)]
         pairs.extend(refine_bm(list(x), list(y)))
         pairs = unique_sorted_by_x(pairs)
@@ -206,6 +219,18 @@ def update2(frame):
         new_y = np.array([y for x, y in pairs])
         plot[0].set_xdata(new_x)
         plot[0].set_ydata(new_y)
+    # if (abs(xdata[0] - xdata[-1]) <= 1e-2 ):
+    #     print("a")
+    #     ax.axis([-10, 10, ax.get_ylim()[0], ax.get_ylim()[1]])
+    #     scale = 20/(plot[0].get_xdata()[0] - plot[0].get_ydata()[-1])
+    #     x = np.array(plot[0].get_xdata())* scale
+    #     y = np.array(plot[0].get_ydata()) * s
+    #     plot[0].set_xdata(x)
+    #     plot[0].set_ydata(y)
+    #     s = 1.0
+    #     k = 2
+
+
     #bm_scaled =   np.sqrt(s)*bm
     #scaled_x = (1/s)*new_x
     #bm_scaled = np.sqrt(s) * np.interp( scaled_x, new_x, new_y, left=0, right=0)
@@ -221,4 +246,4 @@ frames = int(animation_duration * 1000 / interval)
 
 ani = animation.FuncAnimation(fig=fig, func=update2, frames=600, interval = 10, save_count= 600)
 ani.save("BM.mp4", writer="ffmpeg", fps=60)
-# plt.show()
+plt.show()
