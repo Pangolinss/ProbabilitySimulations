@@ -6,7 +6,7 @@ import imageio
 pygame.init()
 
 # Screen setup
-WIDTH, HEIGHT = 1600, 800
+WIDTH, HEIGHT = 1600, 400
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("Tree Visualization with Rectangles")
 clock = pygame.time.Clock()
@@ -21,6 +21,17 @@ BLUE = (0, 76, 255)
 VIOLET = (115, 41, 130)
 COLORS = [(155, 112, 157), (169, 104, 147), (204, 109, 110), (148, 152, 199), (101, 80, 123)]
 COLORS2 = [(138, 147, 202) , (210, 116, 134), (255, 189, 141), (253, 187, 152), (237, 130, 120)]
+
+
+NUM_OF_NODES = 1
+SCALE = 30
+X_OFFSET = 800
+Y_OFFSET = 370
+SPACING = 5
+RECT_HEIGHT = 30
+EXPAND_RATE = 0.002
+
+capture_frames = True
 
 
 def complementary_color(rgb):
@@ -211,7 +222,7 @@ def get_tree_depth(node, depth=0):
         return depth
     return max(get_tree_depth(child, depth + 1) for child in node.children)
 
-NUM_OF_NODES = 1
+
 node_array = []
 for i in range(NUM_OF_NODES):
     node_array.append(Node(Tower(-0.5, 0.5)))
@@ -222,7 +233,7 @@ frame_count = 0
 font = pygame.font.Font(None, 24)
 
 # Video export settings
-capture_frames = True
+
 frames = []
 MAX_VIDEO_FRAMES = 6000
 VIDEO_FPS = 60
@@ -241,7 +252,8 @@ while running:
             running = False
     
     # Add new nodes randomly
-    points = np.random.poisson(0.01+ 0.03*(cur_t/2000)  )
+    # points = np.random.poisson(0.01+ 0.03*(cur_t/2000)  ) #use this rate for most of them
+    points = np.random.poisson(1*(0.02+ 0.01*(cur_t/2000))  ) #use this rate for most of them
     for i in range(points):
         base = node_array[0].data.right - node_array[0].data.left
         nucleation = np.random.random() * base - base/2
@@ -252,7 +264,7 @@ while running:
     
 
     for node in node_array:
-        expand_node_rectangles(node, delta_t, rate=0.0025)
+        expand_node_rectangles(node, delta_t, rate=EXPAND_RATE)
 
     # Merge overlapping nodes
     for i in range(NUM_OF_NODES):
@@ -278,11 +290,6 @@ while running:
 
     line_array = [None]*NUM_OF_NODES
     hori_line_array = [None]*NUM_OF_NODES
-    SCALE = 30
-    X_OFFSET = 800
-    Y_OFFSET = 600
-    SPACING = 30
-    RECT_HEIGHT = 30
     for i in range(len(node_array)):
         line_array[i], hori_line_array[i] = node_tree_to_lines(node_array[i])
         for l in line_array[i]:

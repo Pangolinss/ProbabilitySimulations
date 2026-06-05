@@ -7,7 +7,7 @@ import matplotlib.animation as animation
 
 
 BOUND = 10
-STEP = 0.025
+STEP = 0.0125
 SCALE = 1.005
 
 fig, ax = plt.subplots()
@@ -174,6 +174,7 @@ new_x = np.array([x for x, y in new_zip])
 new_y = np.array([y for x, y in new_zip])
 
 plot = ax.plot(new_x, new_y, linewidth=1.0)
+ax.axis([-10,10, 1/5,-1/5])
 
 def prune_and_scale(x, y, x_min, x_max, scale_factor):
     min = 0
@@ -194,9 +195,9 @@ s = 1.0
 k = 2
 def update2(frame):
     global s, calls, BM, new_x, new_y, k, plot
-    s = 1.01 * s
+    s = 1.005 * s
     #ax.axis([-10/s, 10/s, -0.5/(s**2), 0.5/(s**2)])
-    ax.axis([-10/(s**2), 10/(s**2), -3/s, 3/s])
+    ax.axis([-10/(s**2), 10/(s**2), -20/s,20/s])
     xdata = plot[0].get_xdata()
     ydata = plot[0].get_ydata()
     if (s> np.sqrt(k) ):
@@ -244,6 +245,6 @@ animation_duration = 5.0
 interval = 50
 frames = int(animation_duration * 1000 / interval)
 
-ani = animation.FuncAnimation(fig=fig, func=update2, frames=600, interval = 10, save_count= 600)
-ani.save("BM.mp4", writer="ffmpeg", fps=60)
+ani = animation.FuncAnimation(fig=fig, func=update2, frames=900, interval = 10, save_count= 900)
+#ani.save("BM.mp4", writer="ffmpeg", fps=60)
 plt.show()
