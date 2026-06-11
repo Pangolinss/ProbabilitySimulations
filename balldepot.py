@@ -3,27 +3,33 @@ import numpy as np
 import imageio
 import bisect 
 
-WIDTH, HEIGHT = 1250, 800
-BLOCK_WIDTH = 2
-BLOCK_HEIGHT = 2
-SPACING = 2
+#WIDTH, HEIGHT = 1750, 1000
+WIDTH, HEIGHT = 1000, 800
+BLOCK_WIDTH = 50
+BLOCK_HEIGHT = 50
+SPACING = 50
+V_MIN = 5
+V_MAX = 6
+RATE = 0.05
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("Ballistic Deposition")
 clock = pygame.time.Clock()
 
-BG_COLOR =  (25, 20,30)
+#BG_COLOR = (57,42,57)
+BG_COLOR = (25, 20,30)
 ENABLE_BM = False
-HAS_INITIAL = True
+ENABLE_RANDOMSPEED = False
+HAS_INITIAL = False
 #initial types: circle image
 INITIAL_TYPE = "image"
 CIRCLE_CENTRE = (500,600)
 CIRCLE_RADIUS = 150
 
 class Block(object):
-    def __init__(self, x, y):
+    def __init__(self, x, y, v):
         self.x = x
         self.y = y
-        self.v = 1
+        self.v = v
         self.color = (255,255,255)
         self.alive = True
         self.gone = False
@@ -86,10 +92,13 @@ MAX_VIDEO_FRAMES = 9000
 VIDEO_FPS = 60
 VIDEO_FILENAME = "animation.mp4"
 
-img = pygame.image.load('skyline.webp')
-img = pygame.transform.scale(img, (1875,344))
-screen.fill((0,0,0))
-screen.blit(img,(0,525))
+
+
+img = pygame.image.load('skyline.png')
+if (HAS_INITIAL and INITIAL_TYPE == "image"):
+    # img = pygame.transform.scale(img, (1875,344))
+    screen.fill((0,0,0))
+    screen.blit(img,(0,500))
 if (HAS_INITIAL):
     if (INITIAL_TYPE == "circle"):
         bounding_box[0] = CIRCLE_CENTRE[0]-CIRCLE_RADIUS
@@ -109,17 +118,62 @@ if (HAS_INITIAL):
     if (INITIAL_TYPE == "image"):
         bounding_box[0] = 0
         bounding_box[1] = 300
-        bounding_box[2] = 900
-        bounding_box[3] = 750
+        bounding_box[2] = 1500
+        bounding_box[3] = 900
         for x in range(max(bounding_box[0], 0), bounding_box[2]):
             for y in range(bounding_box[1], min(bounding_box[3], HEIGHT)):
-                if screen.get_at((x,y))[1] > 100:
+                if screen.get_at((x,y))[1] >150:
                     for i in range(-1,2):
-                        for j in range(0,2):
-                            if (not screen.get_at( (max(x+i,0), y +j) )[1] > 100):
+                        for j in range(-1,1):
+                            if (screen.get_at( (max(x+i,0), y +j) )[1] <100):
                                 deadzone[max(x+i,0), y +j] = True
 
                     
+def update(block, deadblocks, deadzone, gone_index, bounding_box, occupied):
+    if block.alive:
+        if (ENABLE_BM):
+            block.x += np.random.randint(-4,5)
+        block.y += block.v 
+        if block.y >= HEIGHT - BLOCK_HEIGHT or isOverLapBox( (block.x, block.y, block.x+BLOCK_WIDTH, block.y+BLOCK_HEIGHT), bounding_box ):
+            block.y -= block.v
+            for i in range(block.v):
+                block.y += 1
+                if ( block.y >= HEIGHT-BLOCK_HEIGHT and not HAS_INITIAL):
+                    if False and ( (block.x <450) or (block.x > 550)):
+                        block.gone = True
+                        bisect.insort(gone_index, -k)
+                    else:
+                        block.y = HEIGHT - BLOCK_HEIGHT
+                        block.alive = False
+                        deadblocks.append(block)
+                        block.gone = True
+                        bisect.insort(gone_index, -k)
+                        if ( not np.array(bounding_box).any()):
+                            bounding_box[0] = block.x
+                            bounding_box[1] = block.y
+                            bounding_box[2] = block.x + BLOCK_WIDTH
+                            bounding_box[3] = block.y + BLOCK_HEIGHT
+
+                        if isOverLapBox( (block.x, block.y, block.x+BLOCK_WIDTH, block.y+BLOCK_HEIGHT), bounding_box ):
+                            bounding_box = expand_box(block.x,block.y, bounding_box)
+                        occupied[(block.x,block.y)] = True
+                        add_deadzone(block.x, block.y, deadzone, occupied)
+                    return
+                elif isOverLapBox( (block.x, block.y, block.x+BLOCK_WIDTH, block.y+BLOCK_HEIGHT), bounding_box ):
+                    if (block.x, block.y) in deadzone:
+                        # if (intersect(block, other)):
+                        #     if not((abs(block.x - other.x) == BLOCK_WIDTH) and (block.y == other.y)):
+                        #         block.y = other.y - BLOCK_HEIGHT
+                        block.alive = False
+                        deadblocks.append(block)
+                        block.gone = True
+                        bisect.insort(gone_index, -k)
+                        bounding_box = expand_box(block.x,block.y, bounding_box)
+                        occupied[(block.x,block.y)]= True
+                        del deadzone[(block.x, block.y)]
+                        add_deadzone(block.x, block.y, deadzone, occupied)
+                        return
+
 
 while running:
     delta_t = clock.tick(120)/1000
@@ -128,61 +182,20 @@ while running:
             running = False
     screen.fill(BG_COLOR)
 
-    n = np.random.poisson(8)
+    n = np.random.poisson(RATE)
     new_blocks = []
     gone_index = []
     for i in range(n):
-        new_blocks = Block(np.random.randint(0, WIDTH/SPACING)*SPACING , 0)
+        new_blocks = Block(np.random.randint(0, WIDTH/SPACING)*SPACING , 0, np.random.randint(V_MIN,V_MAX))
         if gone_index != []:
             blocks[-gone_index[-1]] = new_blocks
             gone_index = gone_index[:-1]
         else:
             blocks.append(new_blocks)
-    for j in range(6):
+    for j in range(1):
         k =0
         for block in blocks:
-            if (ENABLE_BM and block.type > j):
-                continue
-            if block.alive:
-                block.y += block.v 
-                if (ENABLE_BM):
-                    if (np.random.randint(0,5) == 0):
-                        block.x += np.random.randint(-1,2)
-                if block.y >= HEIGHT - BLOCK_HEIGHT:
-                    if (not HAS_INITIAL):
-                        if (block.x <450) or (block.x > 550):
-                            block.gone = True
-                            bisect.insort(gone_index, -k)
-                        else:
-                            block.y = HEIGHT - BLOCK_HEIGHT
-                            block.alive = False
-                            deadblocks.append(block)
-                            block.gone = True
-                            bisect.insort(gone_index, -k)
-                            if ( not np.array(bounding_box).any()):
-                                bounding_box[0] = block.x
-                                bounding_box[1] = block.y
-                                bounding_box[2] = block.x + BLOCK_WIDTH
-                                bounding_box[3] = block.y + BLOCK_HEIGHT
-
-                            if isOverLapBox( (block.x, block.y, block.x+BLOCK_WIDTH, block.y+BLOCK_HEIGHT), bounding_box ):
-                                bounding_box = expand_box(block.x,block.y, bounding_box)
-                            occupied[(block.x,block.y)] = True
-                            add_deadzone(block.x, block.y, deadzone, occupied)
-                else:
-                    if isOverLapBox( (block.x, block.y, block.x+BLOCK_WIDTH, block.y+BLOCK_HEIGHT), bounding_box ):
-                        if (block.x, block.y) in deadzone:
-                            # if (intersect(block, other)):
-                            #     if not((abs(block.x - other.x) == BLOCK_WIDTH) and (block.y == other.y)):
-                            #         block.y = other.y - BLOCK_HEIGHT
-                            block.alive = False
-                            deadblocks.append(block)
-                            block.gone = True
-                            bisect.insort(gone_index, -k)
-                            bounding_box = expand_box(block.x,block.y, bounding_box)
-                            occupied[(block.x,block.y)]= True
-                            del deadzone[(block.x, block.y)]
-                            add_deadzone(block.x, block.y, deadzone, occupied)
+           update(block, deadblocks, deadzone, gone_index, bounding_box, occupied)
         k += 1
 
     for block in blocks:
@@ -192,6 +205,8 @@ while running:
         ratio = 0
         if (HAS_INITIAL and INITIAL_TYPE == "circle"):
             ratio = 0.5 + np.sqrt((block.x -CIRCLE_CENTRE[0])**2 + (block.y - CIRCLE_CENTRE[1])**2)/(2*CIRCLE_RADIUS)
+        elif (HAS_INITIAL and INITIAL_TYPE == "image"):
+            ratio = 10
         else:
             ratio = 0.5 + np.sqrt((block.x -500)**2 + (block.y - HEIGHT-1)**2)/300
         pygame.draw.rect(screen, brighten((107,177,210), ratio), (block.x, block.y, BLOCK_WIDTH, BLOCK_HEIGHT))
@@ -199,7 +214,8 @@ while running:
         if INITIAL_TYPE == "circle":
             pygame.draw.circle(screen, (58,72,102), CIRCLE_CENTRE, CIRCLE_RADIUS)
 
-    screen.blit(img,(0,525))
+    if HAS_INITIAL and INITIAL_TYPE == "image":
+        screen.blit(img,(0,500))
 
 
     # Update the display
