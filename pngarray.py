@@ -1,12 +1,14 @@
 import pygame
 import numpy as np
 import imageio
+import PerlineNoise
+import math as math
 
 # Initialize pygame
 pygame.init()
 
 # Screen setup
-WIDTH, HEIGHT = 1600, 400
+WIDTH, HEIGHT = 1600, 800
 screen = pygame.display.set_mode((WIDTH, HEIGHT))
 pygame.display.set_caption("Tree Visualization with Rectangles")
 clock = pygame.time.Clock()
@@ -22,14 +24,15 @@ VIOLET = (115, 41, 130)
 COLORS = [(155, 112, 157), (169, 104, 147), (204, 109, 110), (148, 152, 199), (101, 80, 123)]
 COLORS2 = [(138, 147, 202) , (210, 116, 134), (255, 189, 141), (253, 187, 152), (237, 130, 120)]
 
+RANDOM_INITIAL = True
 
 NUM_OF_NODES = 1
-SCALE = 30
+SCALE = 5
 X_OFFSET = 800
-Y_OFFSET = 370
+Y_OFFSET = 770
 SPACING = 5
-RECT_HEIGHT = 30
-EXPAND_RATE = 0.002
+RECT_HEIGHT = 5
+EXPAND_RATE = 0.01
 
 capture_frames = True
 
@@ -45,12 +48,15 @@ def complementary_color(rgb):
 
 
 class Node(object):
-    def __init__(self, data):
+    def __init__(self, data, parent=None):
         self.data = data
         self.children = []
+        self.parent = parent
 
     def add_child(self, obj):
+        obj.parent = self
         self.children.append(obj)
+
 
 class Line(object):
     def __init__(self, p1_, p2_, d, color = (0,0,0), thickness = 1):
@@ -127,6 +133,8 @@ def merge_overlaps(node, merge_locations, depth=0):
             # create merged node
             merged_node = Node(Tower(cur_left, cur_right))
             merged_node.children = cur_children
+            for child in merged_node.children:
+                child.parent = merged_node
             merged_children.append(merged_node)
         else:
             # keep the current node
@@ -135,6 +143,8 @@ def merge_overlaps(node, merge_locations, depth=0):
 
     # replace parent's children with merged list
     node.children = merged_children
+    for child in node.children:
+        child.parent = node
 
     # recurse into children
     for child in node.children:
@@ -223,9 +233,70 @@ def get_tree_depth(node, depth=0):
     return max(get_tree_depth(child, depth + 1) for child in node.children)
 
 
+def discrete_random_walk(x, rate = 0.1):
+    y = [None]*len(x)
+    y[0] = 0
+    for i in range(1,len(x)):
+        y[i] = y[i-1] + (np.random.randint(0,2)*2-1)* np.random.poisson(rate)
+        if y[i]< 0:
+            y[i] = y[i-1]
+    y[-1] = 0
+    return y
+def discrete_to_node(x, y):
+    """Build a tree from x/y data using a stack for active nodes."""
+    if len(x) != len(y):
+        raise ValueError("x and y must have the same length")
+    if len(x) < 2:
+        raise ValueError("At least two x/y points are required")
+
+    points = sorted(zip(x, y), key=lambda p: p[0])
+    xs, ys = zip(*points)
+    ys = [int(round(v)) for v in ys]
+
+    for i in range(1, len(ys)):
+        if abs(ys[i] - ys[i-1] - round(ys[i] - ys[i-1])) > 1e-9:
+            raise ValueError("Adjacent y values must differ by integer amounts")
+
+    root = Node(Tower(xs[0], xs[-1]))
+    stack = [root]
+
+    for i in range(1, len(xs)):
+        delta = ys[i] - ys[i-1]
+        if delta > 0:
+            for _ in range(delta):
+                node = Node(Tower(xs[i], xs[i]))
+                stack[-1].add_child(node)
+                stack.append(node)
+        elif delta < 0:
+            for _ in range(-delta):
+                if len(stack) <= 1:
+                    raise ValueError("y decreased below the root level")
+                closing = stack.pop()
+                closing.data.right = xs[i]
+
+    while len(stack) > 1:
+        closing = stack.pop()
+        closing.data.right = xs[-1]
+
+    return root
+
+
+            
+
+
+
+
 node_array = []
-for i in range(NUM_OF_NODES):
-    node_array.append(Node(Tower(-0.5, 0.5)))
+if not RANDOM_INITIAL:
+    for i in range(NUM_OF_NODES):
+        node_array.append(Node(Tower(-0.5, 0.5)))
+
+if RANDOM_INITIAL:
+    x = np.linspace(-150,150,300)
+    y = discrete_random_walk(x, 3)
+    node = discrete_to_node(x,y)
+    node_array.append(node)
+    
 
 
 # Simulation parameters
@@ -253,13 +324,13 @@ while running:
     
     # Add new nodes randomly
     # points = np.random.poisson(0.01+ 0.03*(cur_t/2000)  ) #use this rate for most of them
-    points = np.random.poisson(1*(0.02+ 0.01*(cur_t/2000))  ) #use this rate for most of them
+    points = np.random.poisson(2*(0.04+ 0.06*(cur_t/500))  ) #use this rate for most of them
     for i in range(points):
         base = node_array[0].data.right - node_array[0].data.left
         nucleation = np.random.random() * base - base/2
         parent, parent_depth = find_deepest_node_for_x(node_array[0], nucleation)
         if parent is not None:
-            new_node = Node(Tower(nucleation - 0.1, nucleation + 0.1))
+            new_node = Node(Tower(nucleation - 0.05, nucleation + 0.05))
             parent.add_child(new_node)
     
 
